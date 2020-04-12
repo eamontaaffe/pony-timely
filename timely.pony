@@ -1,37 +1,29 @@
-trait Channel[A]
+class Observable[A]
   let _consumers: Array[Observer[A] tag] = _consumers.create()
 
-  fun subscribe(consumer: Observer[A] tag): None =>
+  fun apply(consumer: Observer[A] tag): None =>
     _consumers.push(consumer)
 
-  fun _send(message: Message[A], timestamp: Timestamp): None =>
+  fun send(message: Message[A], timestamp: Timestamp): None =>
     for c in _consumers.values() do
       c.on_recieve(this, message, timestamp)
     end
 
-  fun _notify(timestamp): None =>
+  fun notify(timestamp): None =>
     for c in _consumers.values() do
       c.on_notify(timestamp)
     end
 
 
-trait Operator
-  fun tag _send_by[A](c: Channel[A], m: Message[A], t: Timestamp): None =>
-    // TODO: Implement _send_by
-    None
-
-  fun tag _notify_at(t: Timestamp): None =>
-    // TODO: Implement _notify_at
-    None
-
-  fun tag on_receive[A](c: Channel[A], m: Message[A], t: Timestamp): None
+trait Observer[A]
+  fun tag on_receive(m: Message[A], t: Timestamp): None
   fun tag on_notify(t: Timestamp): None
 
 
-actor DistinctCount is Operator
+trait Vertex[A, B] is (Observer[A] & Observable[B])
 
 
-actor IngressOperator is Operator
+actor IngressVertex[A] is Vertex[A, A]
   """
   Ingress vertices add a new index:
 
@@ -39,14 +31,14 @@ actor IngressOperator is Operator
   Output timestamp: (c1,...,ck,0)
   """
 
-  be on_receive(message: Message[A], timestamp: Timestamp) =>
-    _send_by(message, timestamp.push(0))
+  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
+    observable.notify(m, t.push(0))
 
-  be on_notify(timestamp: Timestamp) =>
-    _notify_at(timestamp.push(0))
+  fun tag on_notify(t: Timestamp): None =>
+    observable.notify(t.push(0))
 
 
-actor EgressOperator[A] is (Observer[A] & Observable[A])
+actor EgressVertex[A] is Vertex[A, A]
   """
   Egress vertices removes the last index:
 
@@ -54,14 +46,14 @@ actor EgressOperator[A] is (Observer[A] & Observable[A])
   Output timestamp: (c1,...,ck)
   """
 
-  be on_receive(message: Message[A], timestamp: Timestamp) =>
-    _send_by(message, timestamp.pop())
+  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
+    observable.notify(m, t.pop())
 
-  be on_notify(timestamp: Timestamp) =>
-    _notify_at(timestamp.pop())
+  fun tag on_notify(t: Timestamp): None =>
+    observable.notify(t.pop())
 
 
-actor FeedbackOperator[A] is (Observer[A] & Observable[A])
+actor FeedbackVertex[A] is Vertex[A, A]
   """
   Feedback vertices increments the last index:
 
@@ -69,14 +61,8 @@ actor FeedbackOperator[A] is (Observer[A] & Observable[A])
   Ouput timestamp: (c1,...,inc(ck))
   """
 
-  be on_receive(message: Message[A], timestamp: Timestamp) =>
-    _send_by(
-      message,
-      timestamp.update(timestamp.size() - 1, {(x) => x.add(1)})
-    )
+  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
+    observable.notify(m, t.push(0))
 
-  be on_notify(timestamp: Timestamp) =>
-    _notify_at(
-      message,
-      timestamp.update(timestamp.size() - 1, {(x) => x.add(1)})
-    )
+  fun tag on_notify(t: Timestamp): None =>
+    observable.notify(t.push(0))
