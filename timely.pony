@@ -1,68 +1,59 @@
-class Observable[A]
-  let _consumers: Array[Observer[A] tag] = _consumers.create()
+use "collections/persistent"
 
-  fun apply(consumer: Observer[A] tag): None =>
-    _consumers.push(consumer)
+type Timestamp is Vec[USize]
+type Message[A] is A
 
-  fun send(message: Message[A], timestamp: Timestamp): None =>
-    for c in _consumers.values() do
-      c.on_recieve(this, message, timestamp)
-    end
+trait VertexNotify[A: Any #share, B: Any #share]
+  fun on_receive(vertex: Vertex[A, B], m: Message[A], t: Timestamp): None
+  fun on_notify(vertex: Vertex[A, B], t: Timestamp): None
 
-  fun notify(timestamp): None =>
-    for c in _consumers.values() do
-      c.on_notify(timestamp)
-    end
-
-
-trait Observer[A]
+trait Observer[A: Any #share]
   fun tag on_receive(m: Message[A], t: Timestamp): None
   fun tag on_notify(t: Timestamp): None
 
+trait Observable[A: Any #share]
+  fun tag subscribe(o: Observer[A] tag): None
 
-trait Vertex[A, B] is (Observer[A] & Observable[B])
-
-
-actor IngressVertex[A] is Vertex[A, A]
+actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
   """
-  Ingress vertices add a new index:
-
-  Input timestamp: (c1,...,ck)
-  Output timestamp: (c1,...,ck,0)
+  Vertex implemented using the Notifier pattern:
+  https://patterns.ponylang.io/code-sharing/notifier.html
   """
+  let _subscribers: Array[Observer[A] tag] = _subscribers.create()
+  let _notify: VertexNotify[A, B]
 
-  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
-    observable.notify(m, t.push(0))
+  new create(notify: VertexNotify[A, B] iso) =>
+    _notify = consume notify
 
-  fun tag on_notify(t: Timestamp): None =>
-    observable.notify(t.push(0))
+  be subscribe(subscriber: Observer[A] tag) =>
+    _subscribers.push(subscriber)
 
+  be on_receive(m: Message[A], t: Timestamp) =>
+    _notify.on_receive(this, m, t)
 
-actor EgressVertex[A] is Vertex[A, A]
-  """
-  Egress vertices removes the last index:
+  be on_notify(t: Timestamp) =>
+    _notify.on_notify(this, t)
 
-  Input timestamp: (c1,...,ck,ck+1)
-  Output timestamp: (c1,...,ck)
-  """
+  fun _send_at(message: Message[A], timestamp: Timestamp): None =>
+    for s in _subscribers.values() do
+      s.on_receive(this, message, timestamp)
+    end
 
-  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
-    observable.notify(m, t.pop())
+  fun _notify_at(timestamp: Timestamp): None =>
+    for s in _subscribers.values() do
+      s.on_notify(timestamp)
+    end
 
-  fun tag on_notify(t: Timestamp): None =>
-    observable.notify(t.pop())
+actor Input[A: Any #share] is Observable[A]
+  var _epoch: USize = 0
+  let _subscribers: Array[Observer[A] tag] = _subscribers.create()
 
+  be subscribe(subscriber: Observer[A] tag) =>
+    _subscribers.push(subscriber)
 
-actor FeedbackVertex[A] is Vertex[A, A]
-  """
-  Feedback vertices increments the last index:
-
-  Input timestamp: (c1,...,ck)
-  Ouput timestamp: (c1,...,inc(ck))
-  """
-
-  fun tag on_recieve(m: Message[A], t: Timestamp): None =>
-    observable.notify(m, t.push(0))
-
-  fun tag on_notify(t: Timestamp): None =>
-    observable.notify(t.push(0))
+  be send(message: Message[A]) =>
+    let timestamp: Timestamp = [ _epoch = _epoch + 1 ]
+    for s in _subscribers.values() do
+      s.on_recieve(message, timestamp)
+      s.on_notify(timestamp)
+    end
