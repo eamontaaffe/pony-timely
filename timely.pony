@@ -1,6 +1,11 @@
 use "collections/persistent"
 use "debug"
 
+"""
+Links:
+- https://timelydataflow.github.io/timely-dataflow
+"""
+
 type Timestamp is Vec[USize]
 type Message[A] is A
 
@@ -12,16 +17,19 @@ trait Observable[X: Any #share]
   fun tag subscribe(o: Observer[X] tag): None
 
   fun tag map[Y: Any #share](fn: {(X): Y} iso): Observable[Y] tag =>
-    let notify = MapNotify[X, Y].create(consume fn)
+    _applyNotify[Y](MapNotify[X, Y].create(consume fn))
+
+  fun tag flatMap[Y: Any #share](fn: {(X): Array[Y]} iso): Observable[Y] tag =>
+    _applyNotify[Y](FlatMapNotify[X, Y].create(consume fn))
+
+  fun tag reduce[Y: Any #share](fn: {(X, Y): Y} iso, acc: Y): Observable[Y] tag =>
+    _applyNotify[Y](ReduceNotify[X, Y].create(consume fn, acc))
+
+  fun tag _applyNotify[Y: Any #share](notify: VertexNotify[X, Y] iso): Observable[Y] tag =>
     let wrapper = VertexWrapper[X, Y](consume notify)
     subscribe(wrapper.inner)
     wrapper.inner
 
-  fun tag flatMap[Y: Any #share](fn: {(X): Array[Y]} iso): Observable[Y] tag =>
-    let notify = FlatMapNotify[X, Y].create(consume fn)
-    let wrapper = VertexWrapper[X, Y](consume notify)
-    subscribe(wrapper.inner)
-    wrapper.inner
 
 class VertexWrapper[A: Any #share, B: Any #share]
   """
@@ -51,7 +59,6 @@ class MapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
 
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
     vertex.notify_at(t)
-    None
 
 class FlatMapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
   let _fn: {(A): Array[B]}
@@ -66,12 +73,28 @@ class FlatMapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
 
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
     vertex.notify_at(t)
+
+class ReduceNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
+  let _fn: {(A, B): B}
+  let _acc: B
+
+  new iso create(fn: {(A, B): B} iso, acc: B) =>
+    _fn = consume fn
+    _acc = consume acc
+
+  fun on_receive(vertex: Vertex[A, B], m: Message[A], t: Timestamp): None =>
+    // TODO: Implement ReduceNotify
     None
+
+  fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
+    vertex.notify_at(t)
 
 actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
   """
   Vertex implemented using the Notifier pattern:
   https://patterns.ponylang.io/code-sharing/notifier.html
+
+  TODO: Use different word than Notify, it is already used by timely pattern
   """
   let _subscribers: Array[Observer[B] tag] = _subscribers.create()
   let _notify: VertexNotify[A, B]
