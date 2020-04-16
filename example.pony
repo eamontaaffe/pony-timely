@@ -1,35 +1,39 @@
 use "debug"
 use "collections/persistent"
+use "itertools"
+use c = "collections"
 
 actor Main
+  """
+  Using a similar example to here: 
+  https://timelydataflow.github.io/timely-dataflow/chapter_1/chapter_1_1.html
+  """
+
   new create(env: Env) =>
     env.out.print("Running example dataflow...")
 
-    let input: Input[String] = input.create()
+    let input: Input[USize] = input.create()
 
     input
-      .flatMap[String]({(sentence) => sentence.split(" .,")})
-      .map[String]({(word) => word.lower()})
-      .reduce[Map[String, USize] val](
-        {(x, acc) => acc.update(x, acc.get_or_else(x, 0) + 1)},
-        Map[String, USize].create()
-      )
+      .map[USize]({(x) => x})
+      .map[USize]({(x) => x})
+      .map[USize]({(x) => x})
+      .map[USize]({(x) => x})
       .subscribe(
-        object is Observer[Map[String, USize] val]
-          be on_receive(result: Map[String, USize] val, ts: Timestamp) =>
-            for pair in result.pairs() do
-              env.out.print("(" + pair._1 + ", " + pair._2.string() + ")")
+        object is Observer[USize]
+          be on_receive(x: USize, ts: Timestamp) =>
+            let limit = x.f64().sqrt().usize()
+            if ((x > 1) and Iter[USize](c.Range(2, limit + 1)).all({(i) => (x % i) > 0})) then
+              env.out.print(x.string() + " is a prime!")
             end
 
-          be on_notify(ts: Timestamp) =>
-            for t in ts.values() do
-              env.out.print("Timestamp: " + t.string())
-            end
+          be on_notify(ts: Timestamp) => None
         end
       )
 
-    input.send("An elephant is an animal.")
-    input.send("All work and no play makes Jack a dull boy.")
+    for i in c.Range(0, 10_000_000) do
+      input.send(i)
+    end
     // input.complete()
 
     env.out.print("Done...")

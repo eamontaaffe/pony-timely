@@ -1,10 +1,8 @@
 use "collections/persistent"
 use "debug"
 
-"""
-Links:
-- https://timelydataflow.github.io/timely-dataflow
-"""
+// Links:
+// - https://timelydataflow.github.io/timely-dataflow
 
 type Timestamp is Vec[USize]
 type Message[A] is A
