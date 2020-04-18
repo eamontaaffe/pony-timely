@@ -21,6 +21,20 @@ trait Observable[X: Any #share]
   fun tag reduce[Y: Any #share](fn: {(X, Y): Y} iso, acc: Y): Observable[Y] tag =>
     _applyNotify[Y](ReduceNotify[X, Y].create(consume fn, acc))
 
+//   fun tag partition(count: USize, selector: {(Message[A]): USize}): Array[Observable[X] tag] =>
+//     """
+//     Partition returns multiple observables with each observable contains only
+//     the elements selected for it by the `selector` function.
+//     """
+//     // TODO: Implement partition
+//
+//   fun tag concat(Observable[X] tag): Observable[X] tag =>
+//     """
+//     Concat is the opposite of partition. It joins another observable of the
+//     same type to create a union of outputs.
+//     """
+//     // TODO Implement concat
+
   fun tag _applyNotify[Y: Any #share](notify: VertexNotify[X, Y] iso): Observable[Y] tag =>
     let wrapper = VertexWrapper[X, Y](consume notify)
     subscribe(wrapper.inner)
