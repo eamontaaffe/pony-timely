@@ -10,7 +10,7 @@ actor Main is TestList
     test(_TestInput)
     test(_TestMap)
     test(_TestFlatMap)
-//     test(_TestReduce)
+    test(_TestReduce)
 
 actor _Inspect[A: Stringable val] is Observer[A]
   var _all: Vec[A] = _all.create()
@@ -101,4 +101,26 @@ class iso _TestFlatMap is UnitTest
       }))
 
     input.send("An elephant is an animal")
+    input.complete()
+
+class iso _TestReduce is UnitTest
+  fun name(): String => "reduce"
+
+  fun apply(h: TestHelper) =>
+    h.long_test(1_000_000)
+
+    let input: Input[USize] =
+      input.create()
+
+    input
+      .reduce[USize]({(x, acc) => x + acc}, 0)
+      .subscribe(_Inspect[USize]({(xs) =>
+        h.assert_eq[USize](xs.size(), 1)
+        h.assert_true(xs.contains(6))
+        h.complete(true)
+      }))
+
+    input.send(1)
+    input.send(2)
+    input.send(3)
     input.complete()

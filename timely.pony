@@ -26,7 +26,6 @@ trait Observable[X: Any #share]
     subscribe(wrapper.inner)
     wrapper.inner
 
-
 class VertexWrapper[A: Any #share, B: Any #share]
   """
   Wrapper class required as a workaround for:
@@ -38,12 +37,10 @@ class VertexWrapper[A: Any #share, B: Any #share]
   new create(notify: VertexNotify[A, B] iso) =>
     inner = Vertex[A, B].create(consume notify)
 
-
 trait VertexNotify[A: Any #share, B: Any #share]
   fun on_receive(vertex: Vertex[A, B], m: Message[A], t: Timestamp): None
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None
   fun on_complete(vertex: Vertex[A, B]): None
-
 
 class MapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
   let _fn: {(A): B}
@@ -135,7 +132,6 @@ actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
       s.on_complete()
     end
 
-
 actor Input[A: Any #share] is Observable[A]
   var _epoch: USize = 0
   let _subscribers: Array[Observer[A] tag] = _subscribers.create()
@@ -147,7 +143,6 @@ actor Input[A: Any #share] is Observable[A]
     let timestamp: Timestamp = Vec[USize].push(_epoch = _epoch + 1)
     for s in _subscribers.values() do
       s.on_receive(message, timestamp)
-      s.on_notify(timestamp)
     end
 
   be complete() =>
