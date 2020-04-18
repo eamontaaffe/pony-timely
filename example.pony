@@ -34,6 +34,7 @@ actor Main
     for i in c.Range(0, 10_000_000) do
       input.send(i)
     end
+
     // input.complete()
 
     env.out.print("Done...")
