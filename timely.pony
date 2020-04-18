@@ -10,6 +10,7 @@ type Message[A] is A
 trait Observer[A: Any #share]
   fun tag on_receive(m: Message[A], t: Timestamp): None
   fun tag on_notify(t: Timestamp): None
+  fun tag on_complete(): None
 
 trait Observable[X: Any #share]
   fun tag subscribe(o: Observer[X] tag): None
@@ -44,6 +45,7 @@ class VertexWrapper[A: Any #share, B: Any #share]
 trait VertexNotify[A: Any #share, B: Any #share]
   fun on_receive(vertex: Vertex[A, B], m: Message[A], t: Timestamp): None
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None
+  fun on_complete(vertex: Vertex[A, B]): None
 
 
 class MapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
@@ -57,6 +59,9 @@ class MapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
 
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
     vertex.notify_at(t)
+
+  fun on_complete(vertex: Vertex[A, B]): None =>
+    vertex.complete_at()
 
 class FlatMapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
   let _fn: {(A): Array[B]}
@@ -72,6 +77,9 @@ class FlatMapNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
     vertex.notify_at(t)
 
+  fun on_complete(vertex: Vertex[A, B]): None =>
+    vertex.complete_at()
+
 class ReduceNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
   let _fn: {(A, B): B}
   let _acc: B
@@ -86,6 +94,9 @@ class ReduceNotify[A: Any #share, B: Any #share] is VertexNotify[A, B]
 
   fun on_notify(vertex: Vertex[A, B], t: Timestamp): None =>
     vertex.notify_at(t)
+
+  fun on_complete(vertex: Vertex[A, B]): None =>
+    vertex.complete_at()
 
 actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
   """
@@ -109,6 +120,9 @@ actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
   be on_notify(t: Timestamp) =>
     _notify.on_notify(this, t)
 
+  be on_complete() =>
+    _notify.on_complete(this)
+
   be send_at(message: Message[B], timestamp: Timestamp) =>
     for s in _subscribers.values() do
       s.on_receive(message, timestamp)
@@ -118,6 +132,12 @@ actor Vertex[A: Any #share, B: Any #share] is (Observer[A] & Observable[B])
     for s in _subscribers.values() do
       s.on_notify(timestamp)
     end
+
+  be complete_at() =>
+    for s in _subscribers.values() do
+      s.on_complete()
+    end
+
 
 actor Input[A: Any #share] is Observable[A]
   var _epoch: USize = 0
@@ -131,4 +151,9 @@ actor Input[A: Any #share] is Observable[A]
     for s in _subscribers.values() do
       s.on_receive(message, timestamp)
       s.on_notify(timestamp)
+    end
+
+  be complete() =>
+    for s in _subscribers.values() do
+      s.on_complete()
     end
